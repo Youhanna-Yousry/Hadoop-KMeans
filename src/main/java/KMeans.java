@@ -19,8 +19,17 @@ import kmeans.KMeansReducer;
 import helpers.RandomPicker;
 import helpers.HDFSReader;
 
+/**
+ * The KMeans class is the main class for the KMeans algorithm. It chooses random centroids, runs the KMeans algorithm,
+ * and outputs the final centroids.
+ */
 public class KMeans {
-    // Select a random point from the input data as the initial centroid
+    /**
+     * Chooses random centroids from the input file.
+     * @param inputPath The input file
+     * @param k The number of centroids to choose
+     * @return An array of k points chosen at random
+     */
     private static Point[] chooseRandomCentroids(String inputPath, int k){
         Point[] points = new Point[k];
         RandomPicker picker = new RandomPicker();
@@ -34,7 +43,14 @@ public class KMeans {
         }
         return points;
     }
-    
+
+    /**
+     * Checks if the centroids have converged.
+     * @param oldCentroids The old centroids
+     * @param newCentroids The new centroids
+     * @param threshold The threshold for convergence
+     * @return True if the centroids have converged, false otherwise
+     */
     private static boolean hasConverged(Point[] oldCentroids, Point[] newCentroids, float threshold) {
         for (int i = 0; i < oldCentroids.length; i++) {
             if (oldCentroids[i].distance(newCentroids[i]) > threshold) {
@@ -44,6 +60,13 @@ public class KMeans {
         return true;
     }
 
+    /**
+     * Reads the centroids from the output of the KMeansReducer.
+     * @param conf The configuration of the job
+     * @param k The number of centroids
+     * @param pathString The path to the output file
+     * @return An array of k points representing the centroids
+     */
     private static Point[] readCentroids(Configuration conf, int k, String pathString) throws IOException, FileNotFoundException {
         Point[] points = new Point[k];
         String[] output = HDFSReader.read(conf, pathString);
@@ -52,10 +75,16 @@ public class KMeans {
             points[i] = new Point(output[i]);
         }
         FileSystem hdfs = FileSystem.get(conf);
+        // Delete the output directory
         hdfs.delete(new Path(pathString), true);
         return points;
     }
 
+    /**
+     * Sets the centroids in the configuration.
+     * @param conf The configuration of the job
+     * @param centroids The centroids to set
+     */
     private static void setCentroids(Configuration conf, Point[] centroids) {
         for (int i = 0; i < centroids.length; i++) {
             conf.unset("c" + i);
@@ -68,7 +97,8 @@ public class KMeans {
             System.err.println("Usage: KMeans <input path> <output path> <k> <max iterations>");
             System.exit(-1);
         }
-        
+
+        // Setup
         Configuration conf = new Configuration();
         String inputPath = args[0];
         String outputPath = args[1];
@@ -95,17 +125,20 @@ public class KMeans {
             FileOutputFormat.setOutputPath(job, new Path(args[1]));
 
             boolean success = job.waitForCompletion(true);
-            
+
+            // Job failed
             if(!success){
                 System.err.println("Error running iteration " + iteration);
                 System.exit(1);
             }
-            
+
+            // Max iterations reached
             if (iteration >= maxIterations) {
                 System.out.println("Max iterations reached");
                 break;
             }
-            
+
+            // Check for convergence
             Point[] oldCentroids = centroids;
             centroids = readCentroids(conf, k, outputPath);
             converged = hasConverged(oldCentroids, centroids, 1e-6f);

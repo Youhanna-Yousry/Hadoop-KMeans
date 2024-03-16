@@ -11,6 +11,7 @@ import java.io.InputStreamReader;
 import java.util.LinkedList;
 import java.util.List;
 
+/** The HDFSReader class is a helper class for reading the output of a MapReduce job from HDFS. */
 public class HDFSReader {
     public static String[] read(Configuration conf, String outputDir) throws IOException {
         List<String> pickedLines = new LinkedList<String>();

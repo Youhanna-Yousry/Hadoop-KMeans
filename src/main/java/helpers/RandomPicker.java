@@ -14,6 +14,10 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import java.io.IOException;
 import java.util.Random;
 
+/**
+ * The RandomPicker class is a helper class for selecting a random sample of lines from a file.
+ * It uses a MapReduce job to assign a random key to each line and then sorts the lines by the random key.
+ * */
 public class RandomPicker {
     public static class RandomPickerMapper extends Mapper<Object, Text, IntWritable, Text>{
         private static final IntWritable randomKey = new IntWritable();
@@ -46,6 +50,12 @@ public class RandomPicker {
         }
     }
 
+    /**
+     * Selects a random sample of n lines from the input directory.
+     * @param inputDir The input directory
+     * @param n The number of lines to select
+     * @return An array of n lines selected at random
+     * */
     public String[] pickRandom(String inputDir, int n) throws IOException, ClassNotFoundException, InterruptedException {
         String outputDir = "random-picker-output" + System.currentTimeMillis();
         Configuration conf = new Configuration();

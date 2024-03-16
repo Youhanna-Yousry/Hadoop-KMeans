@@ -43,7 +43,7 @@ public class Point implements Writable {
     public float distance(Point p) {
         float sum = 0;
         for (int i = 0; i < this.values.length; i++) {
-            sum += Math.pow(this.values[i] - p.values[i], 2);
+            sum += (float) Math.pow(this.values[i] - p.values[i], 2);
         }
         return (float) Math.sqrt(sum);
     }
@@ -72,8 +72,8 @@ public class Point implements Writable {
     @Override
     public void write(DataOutput out) throws IOException {
         out.writeInt(this.values.length);
-        for (int i = 0; i < this.values.length; i++) {
-            out.writeFloat(this.values[i]);
+        for (float value : this.values) {
+            out.writeFloat(value);
         }
     }
 }
