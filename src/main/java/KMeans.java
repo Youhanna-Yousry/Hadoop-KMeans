@@ -1,6 +1,14 @@
+import java.io.BufferedReader;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 
+import java.io.InputStreamReader;
+import java.util.HashSet;
+import java.util.Set;
+
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.LongWritable;
@@ -16,11 +24,11 @@ import models.PointAggregator;
 
 public class KMeans {
     // Mapper class for KMeans. It should read the centroids from the context and emit the closest centroid for each point.
-    public class KMeansMapper extends Mapper<LongWritable, Text, IntWritable, Point> {
+    public static class KMeansMapper extends Mapper<LongWritable, Text, IntWritable, PointAggregator> {
         private Point[] centroids = null;
 
         @Override
-        protected void setup(Context context) throws IOException, InterruptedException {
+        protected void setup(Context context) {
             Configuration conf = context.getConfiguration();
             int k = Integer.parseInt(conf.get("k"));
 
@@ -42,22 +50,22 @@ public class KMeans {
                     closestCentroid = i;
                 }
             }
-            context.write(new IntWritable(closestCentroid), p);
+            context.write(new IntWritable(closestCentroid), new PointAggregator(p));
         }
     }
 
-    public class KMeansCombiner extends Reducer<IntWritable, Point, IntWritable, PointAggregator> {
+    public static class KMeansCombiner extends Reducer<IntWritable, PointAggregator, IntWritable, PointAggregator> {
         @Override
-        public void reduce(IntWritable key, Iterable<Point> values, Context context) throws IOException, InterruptedException {
+        public void reduce(IntWritable key, Iterable<PointAggregator> values, Context context) throws IOException, InterruptedException {
             PointAggregator aggregator = new PointAggregator();
-            for (Point p : values) {
+            for (PointAggregator p : values) {
                 aggregator.aggregate(p);
             }
             context.write(key, aggregator);
         }
     }
 
-    public class KMeansReducer extends Reducer<IntWritable, PointAggregator, Text, Text> {
+    public static class KMeansReducer extends Reducer<IntWritable, PointAggregator, Text, Text> {
         @Override
         public void reduce(IntWritable key, Iterable<PointAggregator> values, Context context) throws IOException, InterruptedException {
             PointAggregator aggregator = new PointAggregator();
@@ -65,16 +73,41 @@ public class KMeans {
                 aggregator.aggregate(p);
             }
             aggregator.average();
-            context.write(new Text("c" + key.toString()), new Text(aggregator.toPoint().toString()));
+            context.write(new Text(key.toString()), new Text(aggregator.toPoint().toString()));
         }
     }
 
-    private static Point[] generateRandomCentroids(int k, int dimensions) {
-        Point[] centroids = new Point[k];
-        for (int i = 0; i < k; i++) {
-            centroids[i] = Point.randomPoint(dimensions);
+    // Select a random point from the input data as the initial centroid
+    private static Point[] chooseRandomCentroids(Configuration conf, int k, String pathString){
+        Point[] points = new Point[k];
+        FileSystem hdfs;
+        try {
+            hdfs = FileSystem.get(conf);
+            FileStatus[] status = hdfs.listStatus(new Path(pathString));
+            Set<String> lines = new HashSet<String>();
+            for (FileStatus fileStatus : status) {
+                BufferedReader br = new BufferedReader(new InputStreamReader(hdfs.open(fileStatus.getPath())));
+                String line;
+                while ((line = br.readLine()) != null) {
+                    lines.add(line);
+                }
+                br.close();
+            }
+            for (int i = 0; i < k; i++) {
+                int random = (int) (Math.random() * lines.size());
+                int j = 0;
+                for (String line : lines) {
+                    if (j == random) {
+                        points[i] = new Point(line);
+                        break;
+                    }
+                    j++;
+                }
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
         }
-        return centroids;
+        return points;
     }
     
     private static boolean hasConverged(Point[] oldCentroids, Point[] newCentroids, float threshold) {
@@ -86,22 +119,45 @@ public class KMeans {
         return true;
     }
 
+    private static Point[] readCentroids(Configuration conf, int k, String pathString) throws IOException, FileNotFoundException {
+        Point[] points = new Point[k];
+        FileSystem hdfs = FileSystem.get(conf);
+        FileStatus[] status = hdfs.listStatus(new Path(pathString));
+
+        for (FileStatus fileStatus : status) {
+            //Read the centroids from the hdfs
+            if (!fileStatus.getPath().toString().endsWith("_SUCCESS")) {
+                BufferedReader br = new BufferedReader(new InputStreamReader(hdfs.open(fileStatus.getPath())));
+                String line;
+                while ((line = br.readLine()) != null){
+                    String[] keyValueSplit = line.split("\t"); //Split line in K,V
+                    int centroidId = Integer.parseInt(keyValueSplit[0]);
+                    points[centroidId] = new Point(keyValueSplit[1]);
+                }
+                br.close();
+            }
+        }
+        //Delete temp directory
+        hdfs.delete(new Path(pathString), true); 
+
+    	return points;
+    }
+
     public static void main(String[] args) throws Exception {
         if (args.length != 4) {
-            System.err.println("Usage: KMeans <input path> <output path> <k> <dimensions> <max iterations>");
+            System.err.println("Usage: KMeans <input path> <output path> <k> <max iterations>");
             System.exit(-1);
         }
         
         Configuration conf = new Configuration();
         int k = Integer.parseInt(args[2]);
-        int dimensions = Integer.parseInt(args[3]);
-        int maxIterations = Integer.parseInt(args[4]);
+        int maxIterations = Integer.parseInt(args[3]);
         conf.set("k", args[2]);
-        conf.set("dimensions", args[3]);
         
-        Point[] centroids = generateRandomCentroids(k, dimensions);
+        Point[] centroids = chooseRandomCentroids(conf, k, args[0]);
         for (int i = 0; i < k; i++) {
             conf.set("c" + i, centroids[i].toString());
+            System.out.println("c" + i + " = " + centroids[i].toString());
         }
         
         boolean converged = false;
@@ -113,9 +169,12 @@ public class KMeans {
             job.setCombinerClass(KMeansCombiner.class);
             job.setReducerClass(KMeansReducer.class);
             job.setOutputKeyClass(IntWritable.class);
-            job.setOutputValueClass(Point.class);
+            job.setOutputValueClass(PointAggregator.class);
             job.setMapOutputKeyClass(IntWritable.class);
-            job.setMapOutputValueClass(Point.class);
+            job.setMapOutputValueClass(PointAggregator.class);
+            FileInputFormat.addInputPath(job, new Path(args[0]));
+            FileOutputFormat.setOutputPath(job, new Path(args[1]));
+
             boolean success = job.waitForCompletion(true);
             
             if(!success){
@@ -129,22 +188,19 @@ public class KMeans {
             }
             
             Point[] oldCentroids = centroids;
-            centroids = new Point[k];
-            for (int i = 0; i < k; i++) {
-                centroids[i] = new Point(conf.get("c" + i));
-            }
-
+            centroids = readCentroids(conf, k, args[1]);
             converged = hasConverged(oldCentroids, centroids, 1e-6f);
 
             if(converged){
                 System.out.println("Converged after " + iteration + " iterations");
-                FileInputFormat.addInputPath(job, new Path(args[0]));
-                FileOutputFormat.setOutputPath(job, new Path(args[1]));
+                for (int i = 0; i < k; i++) {
+                    System.out.println("c" + i + " = " + centroids[i].toString());
+                }
             }
             else{
                 for (int i = 0; i < k; i++) {
                     conf.unset("c" + i);
-                    conf.set("c" + i, centroids[i].toString());
+                    conf.set("c" + i, centroids[i].toString()); 
                 }
             }
             iteration++;

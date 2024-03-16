@@ -1,6 +1,12 @@
 package models;
 
-public class PointAggregator {
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.IOException;
+
+import org.apache.hadoop.io.Writable;
+
+public class PointAggregator implements Writable {
     private float[] values = null;
     private int numPoints = 0;
 
@@ -18,6 +24,11 @@ public class PointAggregator {
             this.values[i] = Float.parseFloat(parts[i]);
         }
         this.numPoints = Integer.parseInt(parts[parts.length - 1]);
+    }
+
+    public PointAggregator(Point p){
+        this.values = p.getValues();
+        this.numPoints = 1;
     }
 
     public void aggregate(final Point p) {
@@ -68,4 +79,23 @@ public class PointAggregator {
         strBuilder.append(this.numPoints);
         return strBuilder.toString();
     }
+
+    @Override
+    public void readFields(DataInput in) throws IOException {
+        this.numPoints = in.readInt();
+        int numValues = in.readInt();
+        this.values = new float[numValues];
+        for (int i = 0; i < numValues; i++) {
+            this.values[i] = in.readFloat();
+        }
+    }
+
+    @Override
+    public void write(DataOutput out) throws IOException {
+        out.writeInt(numPoints);
+        out.writeInt(this.values.length);
+        for (int i = 0; i < this.values.length; i++) {
+            out.writeFloat(this.values[i]);
+        } 
+    }  
 }

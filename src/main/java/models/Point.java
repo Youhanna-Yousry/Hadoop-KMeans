@@ -1,6 +1,11 @@
 package models;
 
-public class Point {
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.IOException;
+
+import org.apache.hadoop.io.Writable;
+public class Point implements Writable {
     private float[] values = null;
 
     public Point(){}
@@ -53,5 +58,22 @@ public class Point {
             }
         }
         return point.toString();
+    }
+
+    @Override
+    public void readFields(DataInput in) throws IOException {
+        int numValues = in.readInt();
+        this.values = new float[numValues];
+        for (int i = 0; i < numValues; i++) {
+            this.values[i] = in.readFloat();
+        }
+    }
+
+    @Override
+    public void write(DataOutput out) throws IOException {
+        out.writeInt(this.values.length);
+        for (int i = 0; i < this.values.length; i++) {
+            out.writeFloat(this.values[i]);
+        }
     }
 }
