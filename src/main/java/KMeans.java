@@ -46,23 +46,22 @@ public class KMeans {
         }
     }
 
-    public class KMeansCombiner extends Reducer<IntWritable, Point, IntWritable, Point> {
+    public class KMeansCombiner extends Reducer<IntWritable, Point, IntWritable, PointAggregator> {
         @Override
         public void reduce(IntWritable key, Iterable<Point> values, Context context) throws IOException, InterruptedException {
             PointAggregator aggregator = new PointAggregator();
             for (Point p : values) {
                 aggregator.aggregate(p);
             }
-            aggregator.average();
-            context.write(key, aggregator.toPoint());
+            context.write(key, aggregator);
         }
     }
 
-    public class KMeansReducer extends Reducer<IntWritable, Point, Text, Text> {
+    public class KMeansReducer extends Reducer<IntWritable, PointAggregator, Text, Text> {
         @Override
-        public void reduce(IntWritable key, Iterable<Point> values, Context context) throws IOException, InterruptedException {
+        public void reduce(IntWritable key, Iterable<PointAggregator> values, Context context) throws IOException, InterruptedException {
             PointAggregator aggregator = new PointAggregator();
-            for (Point p : values) {
+            for (PointAggregator p : values) {
                 aggregator.aggregate(p);
             }
             aggregator.average();
