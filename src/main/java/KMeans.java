@@ -98,6 +98,9 @@ public class KMeans {
     }
 
     public static void main(String[] args) throws Exception {
+        // Compute time taken by main
+        long start = System.currentTimeMillis();
+
         if (args.length != 4) {
             System.err.println("Usage: KMeans <input path> <output path> <k> <max iterations>");
             System.exit(-1);
@@ -158,6 +161,9 @@ public class KMeans {
                 setCentroids(conf, centroids);
             }
             iteration++;
-        }        
+        }
+
+        long end = System.currentTimeMillis();
+        System.out.println("Time taken: " + (end - start) + "ms");
     }
 }
