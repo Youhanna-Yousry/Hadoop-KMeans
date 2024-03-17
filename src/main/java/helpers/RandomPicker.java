@@ -78,6 +78,7 @@ public class RandomPicker {
         return pickedLines;
     }
 
+    // Test the RandomPicker class
     public static void main(String[] args) throws IOException, ClassNotFoundException, InterruptedException {
         if(args.length != 2) {
             System.err.println("Usage: helpers.RandomPicker <input-dir> <n>");

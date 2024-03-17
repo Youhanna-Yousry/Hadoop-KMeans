@@ -67,12 +67,17 @@ public class KMeans {
      * @param pathString The path to the output file
      * @return An array of k points representing the centroids
      */
-    private static Point[] readCentroids(Configuration conf, int k, String pathString) throws IOException, FileNotFoundException {
+    private static Point[] readCentroids(Configuration conf, int k, String pathString) throws IOException {
         Point[] points = new Point[k];
         String[] output = HDFSReader.read(conf, pathString);
-        for(int i = 0; i < k; i++) {
+        int i;
+        for(i = 0; i < k && i < output.length; i++) {
             output[i] = output[i].split("\t")[1];
             points[i] = new Point(output[i]);
+        }
+        while (i < k) {
+            points[i] = Point.randomPoint(points[0].getValues().length);
+            i++;
         }
         FileSystem hdfs = FileSystem.get(conf);
         // Delete the output directory
